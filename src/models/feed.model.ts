@@ -58,11 +58,10 @@ export class FeedModel {
       SELECT 
         f.*,
         c.title as category_title,
-        COUNT(DISTINCT CASE WHEN e.status = 'unread' THEN e.id END) as unread_count,
         COUNT(DISTINCT e.id) as total_count
       FROM feeds f
       JOIN categories c ON c.id = f.category_id
-      LEFT JOIN entries e ON e.feed_id = f.id AND e.status != 'removed'
+      LEFT JOIN entries e ON e.feed_id = f.id
       WHERE f.user_id = ?
       GROUP BY f.id
       ORDER BY f.title
@@ -84,8 +83,7 @@ export class FeedModel {
     const db = getDatabase();
     const stmt = db.prepare(`
       SELECT * FROM feeds 
-      WHERE disabled = 0 
-        AND (next_fetch_at IS NULL OR next_fetch_at <= datetime('now'))
+      WHERE (next_fetch_at IS NULL OR next_fetch_at <= datetime('now'))
       ORDER BY next_fetch_at ASC
       LIMIT ?
     `);
@@ -113,7 +111,7 @@ export class FeedModel {
     const allowedFields = [
       'category_id', 'title', 'feed_url', 'site_url', 'description', 
       'favicon_url', 'etag_header', 'last_modified_header', 'last_fetched_at',
-      'next_fetch_at', 'error_count', 'error_message', 'disabled'
+      'next_fetch_at', 'error_count', 'error_message'
     ];
 
     const setClauses: string[] = [];

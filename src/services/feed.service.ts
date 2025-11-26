@@ -223,7 +223,7 @@ export class FeedService {
   static updateFeed(
     feedId: number,
     userId: number,
-    updates: Partial<Pick<Feed, 'title' | 'category_id' | 'disabled'>>
+    updates: Partial<Pick<Feed, 'title' | 'category_id'>>
   ): Feed | null {
     const feed = FeedModel.findByIdAndUserId(feedId, userId);
     if (!feed) {
@@ -282,6 +282,7 @@ export class FeedService {
 
   /**
    * Create an entry from a parsed feed item
+   * Note: content is not stored, only metadata. Content is fetched on-demand when reading.
    */
   private static async createEntryFromItem(
     feed: Feed,
@@ -290,8 +291,7 @@ export class FeedService {
     if (!item.link) return null;
 
     const publishedAt = item.isoDate || item.pubDate || new Date().toISOString();
-    const content = item.content || item.summary || item.contentSnippet || '';
-    const readingTime = this.estimateReadingTime(content);
+    const summary = item.contentSnippet || item.summary || '';
 
     const entry = EntryModel.createIfNotExists({
       feed_id: feed.id,
@@ -299,10 +299,8 @@ export class FeedService {
       title: item.title || 'Untitled',
       url: item.link,
       author: item.creator || item.author,
-      content,
-      summary: item.contentSnippet || item.summary,
+      summary: summary || undefined,
       published_at: publishedAt,
-      reading_time: readingTime,
     });
 
     // Add enclosure if present
@@ -381,17 +379,6 @@ export class FeedService {
     }
   }
 
-  /**
-   * Estimate reading time in minutes
-   */
-  private static estimateReadingTime(content: string): number {
-    // Strip HTML tags
-    const text = content.replace(/<[^>]*>/g, '');
-    // Count words (rough estimate)
-    const wordCount = text.split(/\s+/).filter(w => w.length > 0).length;
-    // Average reading speed: 200-250 words per minute
-    return Math.max(1, Math.ceil(wordCount / 200));
-  }
 
   /**
    * Validate URL format

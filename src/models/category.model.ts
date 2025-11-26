@@ -47,10 +47,9 @@ export class CategoryModel {
       SELECT 
         c.*,
         COUNT(DISTINCT f.id) as feed_count,
-        COUNT(DISTINCT CASE WHEN e.status = 'unread' THEN e.id END) as unread_count
+        0 as unread_count
       FROM categories c
       LEFT JOIN feeds f ON f.category_id = c.id
-      LEFT JOIN entries e ON e.feed_id = f.id AND e.status = 'unread'
       WHERE c.user_id = ?
       GROUP BY c.id
       ORDER BY c.title

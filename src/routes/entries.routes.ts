@@ -3,7 +3,6 @@ import { body, param, query, validationResult } from 'express-validator';
 import { EntryService } from '../services/entry.service.js';
 import { authenticate } from '../middlewares/auth.middleware.js';
 import { ValidationError } from '../middlewares/error.middleware.js';
-import type { EntryStatus } from '../types/index.js';
 
 const router = Router();
 
@@ -26,7 +25,6 @@ const handleValidation = (req: Request, _res: Response, next: NextFunction) => {
 router.get(
   '/',
   [
-    query('status').optional().isIn(['unread', 'read', 'removed']).withMessage('Invalid status'),
     query('starred').optional().isBoolean().withMessage('Invalid starred value'),
     query('feed_id').optional().isInt().withMessage('Invalid feed ID'),
     query('category_id').optional().isInt().withMessage('Invalid category ID'),
@@ -40,7 +38,6 @@ router.get(
   (req: Request, res: Response, next: NextFunction) => {
     try {
       const options = {
-        status: req.query.status as EntryStatus | undefined,
         starred: req.query.starred === 'true' ? true : req.query.starred === 'false' ? false : undefined,
         feed_id: req.query.feed_id ? parseInt(req.query.feed_id as string, 10) : undefined,
         category_id: req.query.category_id ? parseInt(req.query.category_id as string, 10) : undefined,
@@ -58,26 +55,6 @@ router.get(
     }
   }
 );
-
-/**
- * GET /api/entries/unread
- * Get unread entries
- */
-router.get('/unread', (req: Request, res: Response, next: NextFunction) => {
-  try {
-    const options = {
-      feed_id: req.query.feed_id ? parseInt(req.query.feed_id as string, 10) : undefined,
-      category_id: req.query.category_id ? parseInt(req.query.category_id as string, 10) : undefined,
-      page: req.query.page ? parseInt(req.query.page as string, 10) : undefined,
-      limit: req.query.limit ? parseInt(req.query.limit as string, 10) : undefined,
-    };
-
-    const result = EntryService.getUnreadEntries(req.user!.id, options);
-    res.json({ success: true, ...result });
-  } catch (error) {
-    next(error);
-  }
-});
 
 /**
  * GET /api/entries/starred
@@ -129,53 +106,6 @@ router.get(
 );
 
 /**
- * PUT /api/entries/:id/status
- * Update entry status
- */
-router.put(
-  '/:id/status',
-  [
-    param('id').isInt().withMessage('Invalid entry ID'),
-    body('status').isIn(['unread', 'read', 'removed']).withMessage('Invalid status'),
-    handleValidation,
-  ],
-  (req: Request, res: Response, next: NextFunction) => {
-    try {
-      const entryId = parseInt(req.params.id, 10);
-      const { status } = req.body;
-
-      const entry = EntryService.updateStatus(entryId, req.user!.id, status);
-      res.json({ success: true, data: entry });
-    } catch (error) {
-      next(error);
-    }
-  }
-);
-
-/**
- * PUT /api/entries/status
- * Update status for multiple entries
- */
-router.put(
-  '/status',
-  [
-    body('entry_ids').isArray({ min: 1 }).withMessage('entry_ids must be a non-empty array'),
-    body('entry_ids.*').isInt().withMessage('Invalid entry ID in array'),
-    body('status').isIn(['unread', 'read', 'removed']).withMessage('Invalid status'),
-    handleValidation,
-  ],
-  (req: Request, res: Response, next: NextFunction) => {
-    try {
-      const { entry_ids, status } = req.body;
-      const count = EntryService.updateStatusBatch(entry_ids, req.user!.id, status);
-      res.json({ success: true, data: { updated: count } });
-    } catch (error) {
-      next(error);
-    }
-  }
-);
-
-/**
  * POST /api/entries/:id/star
  * Toggle starred status
  */
@@ -210,31 +140,6 @@ router.put(
       const { starred } = req.body;
       const entry = EntryService.setStarred(entryId, req.user!.id, starred);
       res.json({ success: true, data: entry });
-    } catch (error) {
-      next(error);
-    }
-  }
-);
-
-/**
- * POST /api/entries/mark-all-read
- * Mark all entries as read
- */
-router.post(
-  '/mark-all-read',
-  [
-    body('feed_id').optional().isInt().withMessage('Invalid feed ID'),
-    body('category_id').optional().isInt().withMessage('Invalid category ID'),
-    handleValidation,
-  ],
-  (req: Request, res: Response, next: NextFunction) => {
-    try {
-      const { feed_id, category_id } = req.body;
-      const count = EntryService.markAllAsRead(req.user!.id, {
-        feed_id: feed_id ? parseInt(feed_id, 10) : undefined,
-        category_id: category_id ? parseInt(category_id, 10) : undefined,
-      });
-      res.json({ success: true, data: { marked: count } });
     } catch (error) {
       next(error);
     }

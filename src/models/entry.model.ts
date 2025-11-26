@@ -1,6 +1,6 @@
 import crypto from 'crypto';
 import { getDatabase } from '../database/index.js';
-import type { Entry, EntryStatus, EntryWithFeed, PaginatedResponse, Enclosure } from '../types/index.js';
+import type { Entry, EntryWithFeed, PaginatedResponse, Enclosure } from '../types/index.js';
 
 export interface EntryCreateInput {
   feed_id: number;
@@ -11,11 +11,9 @@ export interface EntryCreateInput {
   content?: string;
   summary?: string;
   published_at: string;
-  reading_time?: number;
 }
 
 export interface EntryQueryOptions {
-  status?: EntryStatus | EntryStatus[];
   starred?: boolean;
   feed_id?: number;
   category_id?: number;
@@ -36,12 +34,13 @@ export class EntryModel {
     const db = getDatabase();
     const hash = this.generateHash(input.feed_id, input.url, input.title);
 
+    // Note: content is not stored, fetched on-demand when reading
     const stmt = db.prepare(`
       INSERT INTO entries (
-        user_id, feed_id, hash, title, url, author, content, summary, 
-        published_at, reading_time
+        user_id, feed_id, hash, title, url, author, summary, 
+        published_at
       )
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?)
     `);
 
     const result = stmt.run(
@@ -51,10 +50,8 @@ export class EntryModel {
       input.title,
       input.url,
       input.author || null,
-      input.content || null,
       input.summary || null,
-      input.published_at,
-      input.reading_time || 0
+      input.published_at
     );
 
     return this.findById(result.lastInsertRowid as number)!;
@@ -112,17 +109,6 @@ export class EntryModel {
     const whereClauses: string[] = ['e.user_id = ?'];
     const params: (string | number)[] = [userId];
 
-    // Status filter
-    if (options.status) {
-      if (Array.isArray(options.status)) {
-        whereClauses.push(`e.status IN (${options.status.map(() => '?').join(', ')})`);
-        params.push(...options.status);
-      } else {
-        whereClauses.push('e.status = ?');
-        params.push(options.status);
-      }
-    }
-
     // Starred filter
     if (options.starred !== undefined) {
       whereClauses.push('e.starred = ?');
@@ -142,8 +128,9 @@ export class EntryModel {
     }
 
     // Search filter (simple LIKE search)
+    // Note: content is not stored, so we only search in title and summary
     if (options.search) {
-      whereClauses.push('(e.title LIKE ? OR e.content LIKE ?)');
+      whereClauses.push('(e.title LIKE ? OR e.summary LIKE ?)');
       const searchPattern = `%${options.search}%`;
       params.push(searchPattern, searchPattern);
     }
@@ -187,29 +174,6 @@ export class EntryModel {
     };
   }
 
-  static updateStatus(entryId: number, userId: number, status: EntryStatus): Entry | null {
-    const db = getDatabase();
-    db.prepare(`
-      UPDATE entries 
-      SET status = ?, updated_at = datetime('now')
-      WHERE id = ? AND user_id = ?
-    `).run(status, entryId, userId);
-
-    return this.findById(entryId);
-  }
-
-  static updateStatusBatch(entryIds: number[], userId: number, status: EntryStatus): number {
-    const db = getDatabase();
-    const placeholders = entryIds.map(() => '?').join(', ');
-    const result = db.prepare(`
-      UPDATE entries 
-      SET status = ?, updated_at = datetime('now')
-      WHERE id IN (${placeholders}) AND user_id = ?
-    `).run(status, ...entryIds, userId);
-
-    return result.changes;
-  }
-
   static toggleStarred(entryId: number, userId: number): Entry | null {
     const db = getDatabase();
     db.prepare(`
@@ -230,40 +194,6 @@ export class EntryModel {
     `).run(starred ? 1 : 0, entryId, userId);
 
     return this.findById(entryId);
-  }
-
-  static markAllAsRead(userId: number, options: { feed_id?: number; category_id?: number } = {}): number {
-    const db = getDatabase();
-    const whereClauses: string[] = ['user_id = ?', "status = 'unread'"];
-    const params: (string | number)[] = [userId];
-
-    if (options.feed_id) {
-      whereClauses.push('feed_id = ?');
-      params.push(options.feed_id);
-    }
-
-    if (options.category_id) {
-      whereClauses.push('feed_id IN (SELECT id FROM feeds WHERE category_id = ?)');
-      params.push(options.category_id);
-    }
-
-    const result = db.prepare(`
-      UPDATE entries 
-      SET status = 'read', updated_at = datetime('now')
-      WHERE ${whereClauses.join(' AND ')}
-    `).run(...params);
-
-    return result.changes;
-  }
-
-  static countUnread(userId: number): number {
-    const db = getDatabase();
-    const result = db.prepare(`
-      SELECT COUNT(*) as count 
-      FROM entries 
-      WHERE user_id = ? AND status = 'unread'
-    `).get(userId) as { count: number };
-    return result.count;
   }
 
   static countStarred(userId: number): number {

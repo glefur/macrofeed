@@ -68,7 +68,6 @@ export interface Feed {
   next_fetch_at: string | null;
   error_count: number;
   error_message: string | null;
-  disabled: boolean;
   created_at: string;
   updated_at: string;
 }
@@ -80,14 +79,11 @@ export interface FeedCreateInput {
 }
 
 export interface FeedWithCounts extends Feed {
-  unread_count: number;
   total_count: number;
   category_title: string;
 }
 
 // Entry types
-export type EntryStatus = 'unread' | 'read' | 'removed';
-
 export interface Entry {
   id: number;
   user_id: number;
@@ -96,12 +92,10 @@ export interface Entry {
   title: string;
   url: string;
   author: string | null;
-  content: string | null;
+  content: string | null; // Always null - content is fetched on-demand, not stored
   summary: string | null;
   published_at: string;
-  status: EntryStatus;
   starred: boolean;
-  reading_time: number;
   created_at: string;
   updated_at: string;
 }

@@ -98,18 +98,16 @@ router.put(
     param('id').isInt().withMessage('Invalid feed ID'),
     body('title').optional().trim().isLength({ min: 1, max: 200 }).withMessage('Invalid title'),
     body('category_id').optional().isInt().withMessage('Invalid category ID'),
-    body('disabled').optional().isBoolean().withMessage('Invalid disabled value'),
     handleValidation,
   ],
   (req: Request, res: Response, next: NextFunction) => {
     try {
       const feedId = parseInt(req.params.id, 10);
-      const { title, category_id, disabled } = req.body;
+      const { title, category_id } = req.body;
 
       const feed = FeedService.updateFeed(feedId, req.user!.id, {
         title,
         category_id: category_id ? parseInt(category_id, 10) : undefined,
-        disabled,
       });
 
       res.json({ success: true, data: feed });
