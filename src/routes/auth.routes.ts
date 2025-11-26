@@ -18,7 +18,7 @@ const handleValidation = (req: Request, _res: Response, next: NextFunction) => {
 
 /**
  * POST /api/auth/login
- * Login with username and password
+ * Login with username and password (returns user info, auth via Basic Auth)
  */
 router.post(
   '/login',
@@ -30,25 +30,11 @@ router.post(
   async (req: Request, res: Response, next: NextFunction) => {
     try {
       const { username, password } = req.body;
-      const userAgent = req.headers['user-agent'];
-      const ipAddress = req.ip || req.socket.remoteAddress;
-
-      const result = await AuthService.login(username, password, userAgent, ipAddress);
-
-      // Set session cookie
-      res.cookie('session_token', result.session.token, {
-        httpOnly: true,
-        secure: process.env.NODE_ENV === 'production',
-        sameSite: 'lax',
-        maxAge: 24 * 60 * 60 * 1000, // 24 hours
-      });
+      const user = await AuthService.login(username, password);
 
       res.json({
         success: true,
-        data: {
-          user: result.user,
-          token: result.session.token,
-        },
+        data: { user },
       });
     } catch (error) {
       next(error);
@@ -77,8 +63,6 @@ router.post(
   async (req: Request, res: Response, next: NextFunction) => {
     try {
       const { username, password } = req.body;
-      const userAgent = req.headers['user-agent'];
-      const ipAddress = req.ip || req.socket.remoteAddress;
 
       // Check if any users exist
       const userCount = UserModel.count();
@@ -90,28 +74,15 @@ router.post(
         throw new ValidationError('Registration is disabled. Please contact an administrator.');
       }
 
-      const result = await AuthService.register(
+      const user = await AuthService.register(
         username,
         password,
-        userAgent,
-        ipAddress,
         isFirstUser // First user becomes admin
       );
 
-      // Set session cookie
-      res.cookie('session_token', result.session.token, {
-        httpOnly: true,
-        secure: process.env.NODE_ENV === 'production',
-        sameSite: 'lax',
-        maxAge: 24 * 60 * 60 * 1000,
-      });
-
       res.status(201).json({
         success: true,
-        data: {
-          user: result.user,
-          token: result.session.token,
-        },
+        data: { user },
         message: isFirstUser ? 'Admin account created successfully' : 'Account created successfully',
       });
     } catch (error) {
@@ -121,41 +92,8 @@ router.post(
 );
 
 /**
- * POST /api/auth/logout
- * Logout current session
- */
-router.post('/logout', authenticate, (req: Request, res: Response, next: NextFunction) => {
-  try {
-    const sessionToken = req.sessionToken || req.cookies?.session_token;
-    
-    if (sessionToken) {
-      AuthService.logout(sessionToken);
-    }
-
-    res.clearCookie('session_token');
-    res.json({ success: true, message: 'Logged out successfully' });
-  } catch (error) {
-    next(error);
-  }
-});
-
-/**
- * POST /api/auth/logout-all
- * Logout all sessions for current user
- */
-router.post('/logout-all', authenticate, (req: Request, res: Response, next: NextFunction) => {
-  try {
-    const count = AuthService.logoutAll(req.user!.id);
-    res.clearCookie('session_token');
-    res.json({ success: true, message: `Logged out from ${count} sessions` });
-  } catch (error) {
-    next(error);
-  }
-});
-
-/**
  * GET /api/auth/me
- * Get current user info
+ * Get current user info (requires Basic Auth)
  */
 router.get('/me', authenticate, (req: Request, res: Response) => {
   res.json({
@@ -165,49 +103,8 @@ router.get('/me', authenticate, (req: Request, res: Response) => {
 });
 
 /**
- * GET /api/auth/sessions
- * Get all active sessions for current user
- */
-router.get('/sessions', authenticate, (req: Request, res: Response) => {
-  const sessions = AuthService.getSessions(req.user!.id);
-  res.json({
-    success: true,
-    data: sessions.map(s => ({
-      id: s.id,
-      user_agent: s.user_agent,
-      ip_address: s.ip_address,
-      created_at: s.created_at,
-      expires_at: s.expires_at,
-    })),
-  });
-});
-
-/**
- * DELETE /api/auth/sessions/:sessionId
- * Delete a specific session
- */
-router.delete('/sessions/:sessionId', authenticate, (req: Request, res: Response, next: NextFunction) => {
-  try {
-    const sessionId = parseInt(req.params.sessionId, 10);
-    if (isNaN(sessionId)) {
-      throw new ValidationError('Invalid session ID');
-    }
-
-    const deleted = AuthService.deleteSession(sessionId, req.user!.id);
-    if (!deleted) {
-      res.status(404).json({ success: false, error: 'Session not found' });
-      return;
-    }
-
-    res.json({ success: true, message: 'Session deleted' });
-  } catch (error) {
-    next(error);
-  }
-});
-
-/**
  * POST /api/auth/change-password
- * Change current user's password
+ * Change current user's password (requires Basic Auth)
  */
 router.post(
   '/change-password',
@@ -246,4 +143,3 @@ router.get('/check', (_req: Request, res: Response) => {
 });
 
 export default router;
-

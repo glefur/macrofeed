@@ -1,11 +1,9 @@
 import cron from 'node-cron';
 import { FeedService } from '../services/feed.service.js';
-import { AuthService } from '../services/auth.service.js';
 import { config } from '../config/index.js';
 import logger from '../utils/logger.js';
 
 let feedRefreshTask: cron.ScheduledTask | null = null;
-let sessionCleanupTask: cron.ScheduledTask | null = null;
 
 /**
  * Start the feed refresh scheduler
@@ -33,23 +31,8 @@ export function startScheduler(): void {
     }
   });
 
-  // Session cleanup task - runs every hour
-  sessionCleanupTask = cron.schedule('0 * * * *', () => {
-    logger.debug('Starting session cleanup...');
-    
-    try {
-      const deleted = AuthService.cleanupExpiredSessions();
-      if (deleted > 0) {
-        logger.info(`Cleaned up ${deleted} expired sessions`);
-      }
-    } catch (error) {
-      logger.error('Error during session cleanup:', error);
-    }
-  });
-
   logger.info(`Scheduler started:`);
   logger.info(`  - Feed refresh: every ${intervalMinutes} minutes`);
-  logger.info(`  - Session cleanup: every hour`);
 }
 
 /**
@@ -59,11 +42,6 @@ export function stopScheduler(): void {
   if (feedRefreshTask) {
     feedRefreshTask.stop();
     feedRefreshTask = null;
-  }
-
-  if (sessionCleanupTask) {
-    sessionCleanupTask.stop();
-    sessionCleanupTask = null;
   }
 
   logger.info('Scheduler stopped');

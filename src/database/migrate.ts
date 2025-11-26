@@ -16,22 +16,6 @@ export async function migrate(): Promise<void> {
       last_login_at TEXT
     );
 
-    -- User sessions table
-    CREATE TABLE IF NOT EXISTS user_sessions (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      user_id INTEGER NOT NULL,
-      token TEXT NOT NULL UNIQUE,
-      user_agent TEXT,
-      ip_address TEXT,
-      created_at TEXT NOT NULL DEFAULT (datetime('now')),
-      expires_at TEXT NOT NULL,
-      FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
-    );
-
-    CREATE INDEX IF NOT EXISTS idx_user_sessions_token ON user_sessions(token);
-    CREATE INDEX IF NOT EXISTS idx_user_sessions_user_id ON user_sessions(user_id);
-    CREATE INDEX IF NOT EXISTS idx_user_sessions_expires_at ON user_sessions(expires_at);
-
     -- Categories table
     CREATE TABLE IF NOT EXISTS categories (
       id INTEGER PRIMARY KEY AUTOINCREMENT,

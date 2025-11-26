@@ -1,5 +1,4 @@
 import { Request, Response, NextFunction } from 'express';
-import { SessionModel } from '../models/session.model.js';
 import { UserModel } from '../models/user.model.js';
 import type { User } from '../types/index.js';
 
@@ -8,48 +7,59 @@ declare global {
   namespace Express {
     interface Request {
       user?: User;
-      sessionToken?: string;
     }
   }
 }
 
 /**
- * Middleware to authenticate requests using session token
+ * Middleware to authenticate requests using HTTP Basic Auth
  */
 export function authenticate(req: Request, res: Response, next: NextFunction): void {
-  // Check for session in cookie or Authorization header
-  const sessionToken = 
-    req.session?.userId ? null : // Express session already has user
-    req.headers.authorization?.replace('Bearer ', '') ||
-    req.cookies?.session_token;
+  const authHeader = req.headers.authorization;
 
-  // If using express-session
-  if (req.session?.userId) {
-    const user = UserModel.findById(req.session.userId);
-    if (user) {
-      req.user = user;
-      return next();
-    }
-    // Session invalid, destroy it
-    req.session.destroy(() => {});
-    res.status(401).json({ success: false, error: 'Session expired' });
+  if (!authHeader || !authHeader.startsWith('Basic ')) {
+    res.status(401).json({ success: false, error: 'Authentication required' });
+    res.setHeader('WWW-Authenticate', 'Basic realm="Macrofeed"');
     return;
   }
 
-  // If using token-based auth
-  if (sessionToken) {
-    const session = SessionModel.findByToken(sessionToken);
-    if (session) {
-      const user = UserModel.findById(session.user_id);
-      if (user) {
-        req.user = user;
-        req.sessionToken = sessionToken;
-        return next();
-      }
-    }
+  // Decode Basic Auth credentials
+  const base64Credentials = authHeader.split(' ')[1];
+  const credentials = Buffer.from(base64Credentials, 'base64').toString('utf-8');
+  const [username, password] = credentials.split(':');
+
+  if (!username || !password) {
+    res.status(401).json({ success: false, error: 'Invalid credentials' });
+    res.setHeader('WWW-Authenticate', 'Basic realm="Macrofeed"');
+    return;
   }
 
-  res.status(401).json({ success: false, error: 'Authentication required' });
+  // Find user and verify password
+  const user = UserModel.findByUsername(username);
+  if (!user) {
+    res.status(401).json({ success: false, error: 'Invalid credentials' });
+    res.setHeader('WWW-Authenticate', 'Basic realm="Macrofeed"');
+    return;
+  }
+
+  // Verify password (async, but we'll handle it synchronously for now)
+  UserModel.verifyPassword(user, password)
+    .then((isValid) => {
+      if (!isValid) {
+        res.status(401).json({ success: false, error: 'Invalid credentials' });
+        res.setHeader('WWW-Authenticate', 'Basic realm="Macrofeed"');
+        return;
+      }
+
+      // Update last login
+      UserModel.updateLastLogin(user.id);
+      req.user = user;
+      next();
+    })
+    .catch(() => {
+      res.status(401).json({ success: false, error: 'Invalid credentials' });
+      res.setHeader('WWW-Authenticate', 'Basic realm="Macrofeed"');
+    });
 }
 
 /**
@@ -73,22 +83,25 @@ export function requireAdmin(req: Request, res: Response, next: NextFunction): v
  * Optional authentication - sets user if authenticated but doesn't require it
  */
 export function optionalAuth(req: Request, res: Response, next: NextFunction): void {
-  const sessionToken = 
-    req.headers.authorization?.replace('Bearer ', '') ||
-    req.cookies?.session_token;
+  const authHeader = req.headers.authorization;
 
-  if (req.session?.userId) {
-    const user = UserModel.findById(req.session.userId);
-    if (user) {
-      req.user = user;
-    }
-  } else if (sessionToken) {
-    const session = SessionModel.findByToken(sessionToken);
-    if (session) {
-      const user = UserModel.findById(session.user_id);
+  if (authHeader && authHeader.startsWith('Basic ')) {
+    const base64Credentials = authHeader.split(' ')[1];
+    const credentials = Buffer.from(base64Credentials, 'base64').toString('utf-8');
+    const [username, password] = credentials.split(':');
+
+    if (username && password) {
+      const user = UserModel.findByUsername(username);
       if (user) {
-        req.user = user;
-        req.sessionToken = sessionToken;
+        UserModel.verifyPassword(user, password)
+          .then((isValid) => {
+            if (isValid) {
+              req.user = user;
+            }
+            next();
+          })
+          .catch(() => next());
+        return;
       }
     }
   }
@@ -97,4 +110,3 @@ export function optionalAuth(req: Request, res: Response, next: NextFunction): v
 }
 
 export default { authenticate, requireAdmin, optionalAuth };
-

@@ -1,17 +1,6 @@
 import { UserModel } from '../models/user.model.js';
-import { SessionModel } from '../models/session.model.js';
-import type { User, UserPublic, UserSession } from '../types/index.js';
+import type { User, UserPublic } from '../types/index.js';
 import { UnauthorizedError, ConflictError, ValidationError } from '../middlewares/error.middleware.js';
-
-export interface LoginResult {
-  user: UserPublic;
-  session: UserSession;
-}
-
-export interface RegisterResult {
-  user: UserPublic;
-  session: UserSession;
-}
 
 export class AuthService {
   /**
@@ -19,10 +8,8 @@ export class AuthService {
    */
   static async login(
     username: string,
-    password: string,
-    userAgent?: string,
-    ipAddress?: string
-  ): Promise<LoginResult> {
+    password: string
+  ): Promise<UserPublic> {
     const user = UserModel.findByUsername(username);
     
     if (!user) {
@@ -38,13 +25,7 @@ export class AuthService {
     // Update last login
     UserModel.updateLastLogin(user.id);
 
-    // Create session
-    const session = SessionModel.create(user.id, userAgent, ipAddress);
-
-    return {
-      user: UserModel.toPublic(user),
-      session,
-    };
+    return UserModel.toPublic(user);
   }
 
   /**
@@ -53,10 +34,8 @@ export class AuthService {
   static async register(
     username: string,
     password: string,
-    userAgent?: string,
-    ipAddress?: string,
     isAdmin = false
-  ): Promise<RegisterResult> {
+  ): Promise<UserPublic> {
     // Validate username
     if (!username || username.length < 3) {
       throw new ValidationError('Username must be at least 3 characters');
@@ -83,45 +62,7 @@ export class AuthService {
       is_admin: isAdmin,
     });
 
-    // Create session
-    const session = SessionModel.create(user.id, userAgent, ipAddress);
-
-    return {
-      user: UserModel.toPublic(user),
-      session,
-    };
-  }
-
-  /**
-   * Logout user by deleting session
-   */
-  static logout(sessionToken: string): boolean {
-    return SessionModel.deleteByToken(sessionToken);
-  }
-
-  /**
-   * Logout all sessions for a user
-   */
-  static logoutAll(userId: number): number {
-    return SessionModel.deleteByUserId(userId);
-  }
-
-  /**
-   * Get user's active sessions
-   */
-  static getSessions(userId: number): UserSession[] {
-    return SessionModel.findByUserId(userId);
-  }
-
-  /**
-   * Delete a specific session
-   */
-  static deleteSession(sessionId: number, userId: number): boolean {
-    const session = SessionModel.findById(sessionId);
-    if (!session || session.user_id !== userId) {
-      return false;
-    }
-    return SessionModel.delete(sessionId);
+    return UserModel.toPublic(user);
   }
 
   /**
@@ -145,9 +86,6 @@ export class AuthService {
 
     // Update password
     await UserModel.updatePassword(user.id, newPassword);
-
-    // Optionally: invalidate all other sessions
-    // SessionModel.deleteByUserId(user.id);
   }
 
   /**
@@ -164,14 +102,6 @@ export class AuthService {
       is_admin: true,
     });
   }
-
-  /**
-   * Clean up expired sessions
-   */
-  static cleanupExpiredSessions(): number {
-    return SessionModel.deleteExpired();
-  }
 }
 
 export default AuthService;
-

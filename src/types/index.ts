@@ -23,17 +23,6 @@ export interface UserPublic {
   last_login_at: string | null;
 }
 
-// Session types
-export interface UserSession {
-  id: number;
-  user_id: number;
-  token: string;
-  user_agent: string | null;
-  ip_address: string | null;
-  created_at: string;
-  expires_at: string;
-}
-
 // Category types
 export interface Category {
   id: number;
